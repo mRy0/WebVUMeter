@@ -1,0 +1,73 @@
+﻿@using Microsoft.AspNetCore.SignalR.Client
+@inject NavigationManager Navigation
+@inject IJSRuntime JScript
+
+
+<div>
+    <canvas id="gauge-left">
+
+    </canvas>
+
+    <canvas id="gauge-right">
+    </canvas>
+</div>
+
+@code {
+    private float _vol_left =1;
+    private float _vol_right = 1;
+
+
+    private HubConnection hubConnection;
+
+    bool gaugeReady = false;
+    private IJSObjectReference _gaugeLeft;
+    private IJSObjectReference _gaugeRight;
+
+
+    protected override async Task OnInitializedAsync()
+    {
+
+        hubConnection = new HubConnectionBuilder()
+            .WithUrl(Navigation.ToAbsoluteUri("/vuhub"))
+            .Build();
+
+        hubConnection.On<float, float>("UpdateVol", (voll, volr) =>
+        {
+            _vol_left = voll;
+            _vol_right = volr;
+            InvokeAsync(Invoker);
+        });
+
+        await hubConnection.StartAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        await base.OnAfterRenderAsync(firstRender);
+
+        if (firstRender)
+        {
+            _gaugeLeft = await JScript.InvokeAsync<IJSObjectReference>("CreateGauge", "gauge-left");
+            _gaugeRight = await JScript.InvokeAsync<IJSObjectReference>("CreateGauge", "gauge-right");
+            gaugeReady = true;
+        }
+
+    }
+
+
+    private async Task Invoker()
+    {
+        if (!gaugeReady)
+            return;
+        await _gaugeLeft.InvokeVoidAsync("set", _vol_left);
+        await _gaugeRight.InvokeVoidAsync("set", _vol_right);
+
+    }
+
+    public bool IsConnected => hubConnection.State == HubConnectionState.Connected;
+
+    public void Dispose()
+    {
+        _ = hubConnection.DisposeAsync();
+    }
+}
